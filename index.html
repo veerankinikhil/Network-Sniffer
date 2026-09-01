@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CodeAlpha - Network Sniffer Dashboard</title>
+  
+  <!-- Tailwind CSS & FontAwesome -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Local & CDN Chart.js -->
+  <script src="/static/chart.min.js"></script>
+  <script>if (typeof Chart === 'undefined') document.write('<script src="https://cdn.jsdelivr.net/npm/chart.js"><\/script>');</script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            cyber: {
+              bg: '#0B0F19',
+              card: '#111827',
+              border: '#1F2937',
+              accent: '#06B6D4',
+              tcp: '#3B82F6',
+              udp: '#10B981',
+              icmp: '#F59E0B',
+              arp: '#EC4899',
+              other: '#8B5CF6'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      background-color: #0B0F19;
+      color: #E5E7EB;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #111827;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #374151;
+      border-radius: 4px;
+    }
+    .hex-font {
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col custom-scrollbar">
+
+  <!-- Navigation Bar -->
+  <header class="bg-cyber-card border-b border-cyber-border px-6 py-4 flex flex-wrap items-center justify-between shadow-lg">
+    <div class="flex items-center space-x-3">
+      <div class="bg-cyan-500/10 p-2.5 rounded-xl border border-cyan-500/30">
+        <i class="fa-solid me-1 fa-network-wired text-cyan-400 text-xl"></i>
+      </div>
+      <div>
+        <h1 class="text-xl font-bold text-white tracking-wide flex items-center gap-2">
+          CodeAlpha Network Sniffer
+          <span class="text-xs bg-cyan-500/20 text-cyan-400 px-2.5 py-0.5 rounded-full border border-cyan-500/30">Task 1</span>
+        </h1>
+        <p class="text-xs text-gray-400">Real-Time Multi-Layer Packet Capture & Protocol Inspection</p>
+      </div>
+    </div>
+
+    <!-- Right Controls -->
+    <div class="flex items-center space-x-3 mt-4 sm:mt-0">
+      <!-- Status Badge -->
+      <div id="statusBadge" class="flex items-center space-x-2 bg-gray-800/80 px-3 py-1.5 rounded-lg border border-gray-700 text-xs text-gray-400">
+        <span class="w-2.5 h-2.5 rounded-full bg-gray-500 inline-block" id="statusDot"></span>
+        <span id="statusText">STOPPED</span>
+      </div>
+
+      <!-- Action Buttons -->
+      <button id="btnStart" onclick="startCapture()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg font-medium text-xs flex items-center gap-2 shadow-lg transition">
+        <i class="fa-solid fa-play"></i> Start Capture
+      </button>
+
+      <button id="btnStop" onclick="stopCapture()" class="bg-rose-600 hover:bg-rose-500 text-white px-4 py-2 rounded-lg font-medium text-xs flex items-center gap-2 shadow-lg transition opacity-50 cursor-not-allowed" disabled>
+        <i class="fa-solid fa-square"></i> Stop
+      </button>
+
+      <button onclick="clearBuffer()" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-2 rounded-lg text-xs font-medium border border-gray-700 transition">
+        <i class="fa-solid fa-trash"></i> Clear
+      </button>
+
+      <div class="h-6 w-px bg-gray-800 mx-1"></div>
+
+      <!-- Download Exports -->
+      <a href="/api/export/json" download class="bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-400 border border-cyan-500/30 px-3 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1.5">
+        <i class="fa-solid fa-file-code"></i> JSON Log
+      </a>
+      <a href="/api/export/pcap" download class="bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 border border-purple-500/30 px-3 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1.5">
+        <i class="fa-solid fa-file-export"></i> Wireshark PCAP
+      </a>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="flex-1 p-6 space-y-6 max-w-7xl w-full mx-auto">
+
+    <!-- Configuration Bar -->
+    <div class="bg-cyber-card border border-cyber-border rounded-xl p-4 flex flex-wrap items-center gap-4 shadow-md">
+      <!-- Mode Selection -->
+      <div class="flex items-center space-x-2">
+        <label class="text-xs text-gray-400 font-medium">Capture Engine:</label>
+        <select id="selectMode" class="bg-gray-900 border border-gray-700 text-emerald-400 font-semibold text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-cyan-500">
+          <option value="live" selected>⚡ 100% Real Live Network Traffic Engine (Interface en0)</option>
+        </select>
+      </div>
+
+      <!-- Interface Selection Dropdown -->
+      <div class="flex items-center space-x-2">
+        <label class="text-xs text-gray-400 font-medium">Network Interface:</label>
+        <select id="selectInterface" class="bg-gray-900 border border-gray-700 text-cyan-400 font-mono text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-cyan-500">
+          <option value="">(Default Active Interface)</option>
+        </select>
+      </div>
+
+      <!-- BPF Filter Input -->
+      <div class="flex items-center space-x-2 flex-1 min-w-[200px]">
+        <label class="text-xs text-gray-400 font-medium">BPF Filter:</label>
+        <input type="text" id="inputFilter" placeholder="e.g. tcp, udp port 53, host 192.168.1.1" class="bg-gray-900 border border-gray-700 text-gray-200 text-xs rounded-lg px-3 py-1.5 w-full focus:outline-none focus:border-cyan-500">
+      </div>
+    </div>
+
+    <!-- Metrics Cards Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="bg-cyber-card border border-cyber-border p-4 rounded-xl flex items-center space-x-4 shadow">
+        <div class="bg-blue-500/10 p-3 rounded-lg border border-blue-500/20 text-blue-400">
+          <i class="fa-solid fa-cubes text-xl"></i>
+        </div>
+        <div>
+          <p class="text-xs text-gray-400">Total Packets</p>
+          <h3 id="cardTotalPackets" class="text-2xl font-bold text-white">0</h3>
+        </div>
+      </div>
+
+      <div class="bg-cyber-card border border-cyber-border p-4 rounded-xl flex items-center space-x-4 shadow">
+        <div class="bg-emerald-500/10 p-3 rounded-lg border border-emerald-500/20 text-emerald-400">
+          <i class="fa-solid fa-hard-drive text-xl"></i>
+        </div>
+        <div>
+          <p class="text-xs text-gray-400">Data Transferred</p>
+          <h3 id="cardTotalBytes" class="text-2xl font-bold text-white">0 KB</h3>
+        </div>
+      </div>
+
+      <div class="bg-cyber-card border border-cyber-border p-4 rounded-xl flex items-center space-x-4 shadow">
+        <div class="bg-purple-500/10 p-3 rounded-lg border border-purple-500/20 text-purple-400">
+          <i class="fa-solid fa-layer-group text-xl"></i>
+        </div>
+        <div>
+          <p class="text-xs text-gray-400">TCP / UDP Streams</p>
+          <h3 id="cardStreams" class="text-2xl font-bold text-white">0 / 0</h3>
+        </div>
+      </div>
+
+      <div class="bg-cyber-card border border-cyber-border p-4 rounded-xl flex items-center space-x-4 shadow">
+        <div class="bg-amber-500/10 p-3 rounded-lg border border-amber-500/20 text-amber-400">
+          <i class="fa-solid fa-shield-halved text-xl"></i>
+        </div>
+        <div>
+          <p class="text-xs text-gray-400">ICMP / ARP Packets</p>
+          <h3 id="cardControlPackets" class="text-2xl font-bold text-white">0 / 0</h3>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Doughnut Chart: Protocol Distribution -->
+      <div class="bg-cyber-card border border-cyber-border p-4 rounded-xl shadow">
+        <h3 class="text-sm font-semibold text-gray-200 mb-3 flex items-center justify-between">
+          <span><i class="fa-chart-pie text-cyan-400 mr-2"></i>Protocol Breakdown</span>
+        </h3>
+        <div class="h-56 relative flex items-center justify-center">
+          <canvas id="protocolChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Line Chart: Packet Capture Rate -->
+      <div class="bg-cyber-card border border-cyber-border p-4 rounded-xl lg:col-span-2 shadow">
+        <h3 class="text-sm font-semibold text-gray-200 mb-3 flex items-center justify-between">
+          <span><i class="fa-chart-line text-emerald-400 mr-2"></i>Live Capture Rate (Packets / Sec)</span>
+        </h3>
+        <div class="h-56">
+          <canvas id="rateChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Packet Stream Table -->
+    <div class="bg-cyber-card border border-cyber-border rounded-xl shadow overflow-hidden">
+      <div class="p-4 border-b border-cyber-border flex items-center justify-between">
+        <h3 class="text-sm font-semibold text-gray-200 flex items-center">
+          <i class="fa-solid fa-list-ul text-cyan-400 mr-2"></i>Captured Network Traffic Stream
+        </h3>
+        <span class="text-xs text-gray-500">Auto-refreshing live log</span>
+      </div>
+
+      <div class="overflow-x-auto max-h-96 overflow-y-auto custom-scrollbar">
+        <table class="w-full text-left border-collapse text-xs">
+          <thead class="bg-gray-900/90 text-gray-400 uppercase text-[10px] tracking-wider sticky top-0 border-b border-gray-800">
+            <tr>
+              <th class="py-3 px-4">#</th>
+              <th class="py-3 px-4">Time</th>
+              <th class="py-3 px-4">Protocol</th>
+              <th class="py-3 px-4">Source Socket</th>
+              <th class="py-3 px-4">Destination Socket</th>
+              <th class="py-3 px-4">Length</th>
+              <th class="py-3 px-4">Flags / Summary</th>
+              <th class="py-3 px-4 text-right">Inspect</th>
+            </tr>
+          </thead>
+          <tbody id="packetTableBody" class="divide-y divide-gray-800/60 font-mono">
+            <tr>
+              <td colspan="8" class="text-center py-8 text-gray-500 font-sans">
+                No network packets captured yet. Click "Start Capture" above.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- Detailed Packet Modal -->
+  <div id="packetModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden">
+    <div class="bg-cyber-card border border-cyber-border rounded-xl max-w-3xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
+      <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+        <h3 id="modalTitle" class="text-base font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-microscope text-cyan-400"></i> Packet Header Inspection
+        </h3>
+        <button onclick="closeModal()" class="text-gray-400 hover:text-white text-lg">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4 text-xs">
+        <div class="bg-gray-900 p-3 rounded-lg border border-gray-800 space-y-1">
+          <p class="text-gray-400 font-sans">Timestamp: <span id="mTime" class="text-white font-mono"></span></p>
+          <p class="text-gray-400 font-sans">Ethernet Protocol: <span id="mEthProto" class="text-cyan-400 font-mono"></span></p>
+          <p class="text-gray-400 font-sans">Source MAC: <span id="mSrcMac" class="text-white font-mono"></span></p>
+          <p class="text-gray-400 font-sans">Destination MAC: <span id="mDstMac" class="text-white font-mono"></span></p>
+        </div>
+
+        <div class="bg-gray-900 p-3 rounded-lg border border-gray-800 space-y-1">
+          <p class="text-gray-400 font-sans">IP Protocol: <span id="mIpProto" class="text-emerald-400 font-mono"></span></p>
+          <p class="text-gray-400 font-sans">Source IP / Port: <span id="mSrcSocket" class="text-white font-mono"></span></p>
+          <p class="text-gray-400 font-sans">Destination IP / Port: <span id="mDstSocket" class="text-white font-mono"></span></p>
+          <p class="text-gray-400 font-sans">TCP Flags: <span id="mFlags" class="text-amber-400 font-mono"></span></p>
+        </div>
+      </div>
+
+      <!-- ASCII Preview -->
+      <div>
+        <h4 class="text-xs font-semibold text-gray-300 mb-1">ASCII Payload Preview:</h4>
+        <div id="mAscii" class="bg-gray-900 p-3 rounded-lg border border-gray-800 text-xs font-mono text-emerald-300 break-all"></div>
+      </div>
+
+      <!-- Hex Dump -->
+      <div>
+        <h4 class="text-xs font-semibold text-gray-300 mb-1">Raw Binary Hex Dump:</h4>
+        <pre id="mHex" class="bg-gray-900 p-3 rounded-lg border border-gray-800 text-[11px] hex-font text-cyan-300 overflow-x-auto"></pre>
+      </div>
+
+      <div class="flex justify-end pt-2">
+        <button onclick="closeModal()" class="bg-gray-800 hover:bg-gray-700 text-white px-4 py-1.5 rounded-lg text-xs font-medium">
+          Close Inspector
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript Dashboard Application Logic -->
+  <script>
+    let lastFetchedId = 0;
+    let packetStore = [];
+    let isRunning = false;
+    let pollInterval = null;
+
+    // Initialize Chart.js
+    const ctxProto = document.getElementById('protocolChart').getContext('2d');
+    const protocolChart = new Chart(ctxProto, {
+      type: 'doughnut',
+      data: {
+        labels: ['TCP', 'UDP', 'ICMP', 'ARP', 'OTHER'],
+        datasets: [{
+          data: [0, 0, 0, 0, 0],
+          backgroundColor: ['#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6'],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { color: '#9CA3AF', font: { size: 10 } } }
+        }
+      }
+    });
+
+    const ctxRate = document.getElementById('rateChart').getContext('2d');
+    const rateChart = new Chart(ctxRate, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Packets / Sec',
+          data: [],
+          borderColor: '#06B6D4',
+          backgroundColor: 'rgba(6, 182, 212, 0.1)',
+          fill: true,
+          tension: 0.3
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: { ticks: { color: '#9CA3AF', font: { size: 9 } }, grid: { color: '#1F2937' } },
+          y: { ticks: { color: '#9CA3AF', font: { size: 10 } }, grid: { color: '#1F2937' }, beginAtZero: true }
+        },
+        plugins: { legend: { display: false } }
+      }
+    });
+
+    async function checkStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        
+        isRunning = data.is_running;
+        updateStatusUI(data);
+      } catch (err) {
+        console.error("Failed to fetch status:", err);
+      }
+    }
+
+    function updateStatusUI(data) {
+      const dot = document.getElementById('statusDot');
+      const text = document.getElementById('statusText');
+      const btnStart = document.getElementById('btnStart');
+      const btnStop = document.getElementById('btnStop');
+
+      if (data.is_running) {
+        dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse inline-block";
+        text.innerText = `REAL CAPTURE ACTIVE (${data.interface.toUpperCase()})`;
+        text.className = "text-emerald-400 font-bold";
+        btnStart.disabled = false;
+        btnStart.classList.remove('opacity-50', 'cursor-not-allowed');
+        btnStop.disabled = false;
+        btnStop.classList.remove('opacity-50', 'cursor-not-allowed');
+      } else {
+        dot.className = "w-2.5 h-2.5 rounded-full bg-gray-500 inline-block";
+        text.innerText = "PAUSED / STOPPED";
+        text.className = "text-gray-400";
+        btnStart.disabled = false;
+        btnStart.classList.remove('opacity-50', 'cursor-not-allowed');
+        btnStop.disabled = true;
+        btnStop.classList.add('opacity-50', 'cursor-not-allowed');
+      }
+
+      // Update Metrics Cards
+      document.getElementById('cardTotalPackets').innerText = data.captured_count;
+      document.getElementById('cardTotalBytes').innerText = (data.stats.total_bytes / 1024).toFixed(1) + " KB";
+      document.getElementById('cardStreams').innerText = `${data.stats.TCP} / ${data.stats.UDP}`;
+      document.getElementById('cardControlPackets').innerText = `${data.stats.ICMP} / ${data.stats.ARP}`;
+
+      // Update Doughnut Chart
+      protocolChart.data.datasets[0].data = [
+        data.stats.TCP,
+        data.stats.UDP,
+        data.stats.ICMP,
+        data.stats.ARP,
+        data.stats.OTHER
+      ];
+      protocolChart.update();
+    }
+
+    async function pollPackets() {
+      try {
+        const res = await fetch(`/api/packets?since=${lastFetchedId}`);
+        const data = await res.json();
+
+        let newPacketCount = 0;
+        if (data.packets && data.packets.length > 0) {
+          newPacketCount = data.packets.length;
+          const tbody = document.getElementById('packetTableBody');
+          if (lastFetchedId === 0) tbody.innerHTML = '';
+
+          data.packets.forEach(pkt => {
+            packetStore.push(pkt);
+            lastFetchedId = pkt.id;
+
+            const row = document.createElement('tr');
+            row.className = "hover:bg-gray-800/50 transition cursor-pointer";
+            row.onclick = () => inspectPacket(pkt.id - 1);
+
+            let protoBadgeClass = "bg-purple-500/20 text-purple-400 border-purple-500/30";
+            if (pkt.protocol === "TCP") protoBadgeClass = "bg-blue-500/20 text-blue-400 border-blue-500/30";
+            else if (pkt.protocol === "UDP") protoBadgeClass = "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
+            else if (pkt.protocol === "ICMP") protoBadgeClass = "bg-amber-500/20 text-amber-400 border-amber-500/30";
+            else if (pkt.protocol === "ARP") protoBadgeClass = "bg-pink-500/20 text-pink-400 border-pink-500/30";
+
+            const srcPortStr = pkt.src_port ? `:${pkt.src_port}` : '';
+            const dstPortStr = pkt.dst_port ? `:${pkt.dst_port}` : '';
+
+            row.innerHTML = `
+              <td class="py-2.5 px-4 text-gray-500">#${String(pkt.id).padStart(4, '0')}</td>
+              <td class="py-2.5 px-4 text-gray-300">${pkt.timestamp}</td>
+              <td class="py-2.5 px-4">
+                <span class="px-2 py-0.5 rounded text-[10px] font-semibold border ${protoBadgeClass}">${pkt.protocol}</span>
+              </td>
+              <td class="py-2.5 px-4 text-gray-200">${pkt.src_ip}${srcPortStr}</td>
+              <td class="py-2.5 px-4 text-gray-200">${pkt.dst_ip}${dstPortStr}</td>
+              <td class="py-2.5 px-4 text-gray-400">${pkt.length} B</td>
+              <td class="py-2.5 px-4 text-gray-300 font-sans truncate max-w-xs">${pkt.info}</td>
+              <td class="py-2.5 px-4 text-right">
+                <button class="text-cyan-400 hover:text-cyan-300 px-2 py-1 bg-cyan-500/10 rounded border border-cyan-500/30">
+                  <i class="fa-solid fa-eye"></i>
+                </button>
+              </td>
+            `;
+            tbody.insertBefore(row, tbody.firstChild);
+          });
+        }
+
+        // Update Rate Chart continuously every second
+        if (isRunning) {
+          const nowLabel = new Date().toLocaleTimeString().split(' ')[0];
+          rateChart.data.labels.push(nowLabel);
+          rateChart.data.datasets[0].data.push(newPacketCount);
+          if (rateChart.data.labels.length > 15) {
+            rateChart.data.labels.shift();
+            rateChart.data.datasets[0].data.shift();
+          }
+          rateChart.update();
+        }
+      } catch (err) {
+        console.error("Error polling packets:", err);
+      }
+    }
+
+    async function fetchInterfaces() {
+      try {
+        const res = await fetch('/api/interfaces');
+        const data = await res.json();
+        const sel = document.getElementById('selectInterface');
+        sel.innerHTML = '<option value="">(Default Active Interface)</option>';
+        if (data.interfaces) {
+          data.interfaces.forEach(iface => {
+            const opt = document.createElement('option');
+            opt.value = iface;
+            opt.innerText = iface;
+            if (iface === "en0" || iface === "eth0" || iface === "wlan0") opt.selected = true;
+            sel.appendChild(opt);
+          });
+        }
+      } catch (err) {
+        console.error("Failed to load interfaces:", err);
+      }
+    }
+
+    async function startCapture() {
+      const mode = document.getElementById('selectMode').value;
+      const iface = document.getElementById('selectInterface').value;
+      const filter = document.getElementById('inputFilter').value;
+
+      lastFetchedId = 0;
+      packetStore = [];
+      document.getElementById('packetTableBody').innerHTML = '';
+
+      await fetch('/api/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, interface: iface, filter })
+      });
+      checkStatus();
+    }
+
+    async function stopCapture() {
+      await fetch('/api/stop', { method: 'POST' });
+      checkStatus();
+    }
+
+    async function clearBuffer() {
+      await fetch('/api/clear', { method: 'POST' });
+      lastFetchedId = 0;
+      packetStore = [];
+      document.getElementById('packetTableBody').innerHTML = `
+        <tr><td colspan="8" class="text-center py-8 text-gray-500 font-sans">No network packets captured yet. Click "Start Capture" above.</td></tr>
+      `;
+      checkStatus();
+    }
+
+    function inspectPacket(index) {
+      const pkt = packetStore[index];
+      if (!pkt) return;
+
+      document.getElementById('mTime').innerText = pkt.timestamp;
+      document.getElementById('mEthProto').innerText = pkt.eth_proto;
+      document.getElementById('mSrcMac').innerText = pkt.src_mac;
+      document.getElementById('mDstMac').innerText = pkt.dst_mac;
+      document.getElementById('mIpProto').innerText = pkt.protocol;
+      document.getElementById('mSrcSocket').innerText = `${pkt.src_ip}:${pkt.src_port || 'N/A'}`;
+      document.getElementById('mDstSocket').innerText = `${pkt.dst_ip}:${pkt.dst_port || 'N/A'}`;
+      document.getElementById('mFlags').innerText = pkt.flags || 'None';
+      document.getElementById('mAscii').innerText = pkt.payload_ascii || '[Empty Payload]';
+
+      // Format Hex Dump
+      let hexText = "";
+      if (pkt.payload_hex) {
+        const hexStr = pkt.payload_hex;
+        for (let i = 0; i < hexStr.length; i += 32) {
+          const chunk = hexStr.substr(i, 32);
+          const pairs = chunk.match(/.{1,2}/g).join(' ');
+          const addr = (i / 2).toString(16).padStart(4, '0');
+          hexText += `${addr}   ${pairs}\n`;
+        }
+      } else {
+        hexText = "  [No Raw Bytes]";
+      }
+      document.getElementById('mHex').innerText = hexText;
+
+      document.getElementById('packetModal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('packetModal').classList.add('hidden');
+    }
+
+    // Polling Loop
+    setInterval(checkStatus, 1500);
+    setInterval(pollPackets, 1000);
+    fetchInterfaces();
+    checkStatus();
+  </script>
+</body>
+</html>
