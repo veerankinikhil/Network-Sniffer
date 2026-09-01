@@ -1,4 +1,4 @@
-# CodeAlpha Task 1: Basic Network Sniffer
+# Task 1: Basic Network Sniffer
 
 A feature-rich, cross-platform Python Network Sniffer built for the **CodeAlpha Cybersecurity Internship**. This application captures live network traffic packets, decodes protocol headers across multiple network layers (Ethernet, IPv4, ARP, TCP, UDP, ICMP, HTTP, DNS), provides payload hex/ASCII inspection, supports BPF filtering, and logs output to JSON & `.pcap` files compatible with Wireshark.
 
